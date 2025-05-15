@@ -1,0 +1,281 @@
+---
+title: "Hypothesis_Testing"
+author: "Tanishq"
+date: "2025-05-02"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(infer)
+sat <- read_csv("SAT.csv")
+head(sat)
+```
+
+# Data Cleaning
+
+```{r}
+sat <- sat |> rename(reading = `Critical Reading Mean`,
+                     math = `Mathematics Mean`,
+                     writing = `Writing Mean`) |>
+  filter(!is.na(reading), !is.na(math), !is.na(writing))
+  
+sat_aov <- sat |> select(reading, 
+                         math, 
+                         writing) |>
+  pivot_longer(cols = c(reading, 
+                        math, 
+                        writing),
+               names_to = "subject",
+               values_to = "score")
+  
+  head(sat_aov)
+
+sat_math_reading <- sat |> 
+  select(math, reading) |> 
+  mutate(diff = math - reading)
+
+sat_math_writing <- sat |> 
+  select(math, writing) |> 
+  mutate(diff = math - writing)
+
+sat_writing_reading <- sat |> 
+  select(writing, reading) |> 
+  mutate(diff = writing - reading)
+```
+
+# Anova Test
+
+Significance level $\alpha = 0.05$ for all the tests.
+
+$H_{0}:$ The mean SAT score is same across all the subject.
+
+$\mu_{math} = \mu_{reading} = \mu_{writing}$
+
+$H_{a}:$ At least one of the mean SAT score is different from others.
+
+At least one $\mu$ differs among math, reading and writing
+
+```{r}
+anova_result <- aov(formula = score~subject, data = sat_aov)
+summary(anova_result)
+```
+
+# Anova Conclusion
+
+since p-value $= 0.00194 < 0.05$ We Reject Null Hypothesis.
+
+At least one subject's mean SAT score (Math, Reading, Writing) is significantly different from others.
+
+# Pairwise T-Test
+
+why? to find out which subject's mean SAT score differs from other.
+
+```{r}
+pairwise.t.test(sat_aov$score, 
+                sat_aov$subject, 
+                p.adjust.method = "bonferroni")
+```
+
+# Pairwise T-Test Conclusion
+
+| Comparison         | Adjusted p-value | Result                    |
+|--------------------|------------------|---------------------------|
+| Math vs Reading    | 0.1332           | No Significant Difference |
+| Math vs Writing    | 0.0013           | Significant Difference    |
+| Writing vs Reading | 0.3866           | No Significant Difference |
+
+Only Math and Writing shows significant difference in mean SAT score.
+
+# Box Plot
+
+To visualize difference between mean SAT scores across each subject.
+
+```{r}
+ggplot(sat_aov, aes(x = subject, y = score, fill = subject)) +
+  geom_boxplot() +
+  labs(title = "SAT Scores by Subject",
+       x = "Subject",
+       y = "SAT Score") +
+  theme(legend.position = "none")
+```
+
+# Paired T-Test
+
+## Math vs Writing
+
+$H_{0}$: There is no difference in Mathematics mean score and Writing Mean score across all schools
+
+$H_{a}$: There is significant difference in Mathematics mean score and Writing Mean score across all schools
+
+$H_{0}:$ diff $= 0$
+
+$H_{a}:$ diff $\not= 0$
+
+### Method 1: Using t.test (Assumes CLT condition are satisfied)
+
+```{r}
+t.test(x = sat_math_writing$math, 
+       y = sat_math_writing$writing, 
+       alternative = "two.sided", 
+       paired = TRUE)
+```
+
+### Method 2: Using Bootstrap re-samples
+
+```{r}
+null_dist <- sat_math_writing |>
+  specify(response = diff) |>
+  hypothesize(null = "point", mu = 0) |>
+  generate(reps = 1000, type = "bootstrap") |>
+  calculate(stat = "mean")
+
+obs_stat <- mean(sat_math_writing$diff)
+
+get_p_value(null_dist, obs_stat, direction = "two.sided")
+visualize(null_dist, bins = 20) +
+  shade_p_value(obs_stat = obs_stat, direction = "two.sided")
+```
+
+## Conclusion (Math vs Writing)
+
+The both the method above show that p value is less than the significance level therefore, rejecting the null hypothesis and concluding that difference between math and writing mean score across school is significant
+
+## Math vs Reading
+
+$H_{0}$: There is no difference in Mathematics mean score and Reading Mean score across all schools
+
+$H_{a}$: There is significant difference in Mathematics mean score and Reading Mean score across all schools
+
+$H_{0}:$ diff $= 0$
+
+$H_{a}:$ diff $\not= 0$
+
+### Method 1: Using t.test (Assumes CLT condition are satisfied)
+
+```{r}
+t.test(x = sat_math_reading$math, 
+       y = sat_math_reading$reading, 
+       alternative = "two.sided", 
+       paired = TRUE)
+```
+
+### Method 2: Using Bootstrap re-samples
+
+```{r}
+null_dist <- sat_math_reading |>
+  specify(response = diff) |>
+  hypothesize(null = "point", mu = 0) |>
+  generate(reps = 1000, type = "bootstrap") |>
+  calculate(stat = "mean")
+
+obs_stat <- mean(sat_math_reading$diff)
+
+get_p_value(null_dist, obs_stat, direction = "two.sided")
+visualize(null_dist, bins = 20) +
+  shade_p_value(obs_stat = obs_stat, direction = "two.sided")
+```
+
+## Conclusion (Math vs Reading)
+
+The both the method above show that p value is less than the significance level therefore, rejecting the null hypothesis and concluding that difference between math and reading mean score across school is significant
+
+## Writing vs Reading
+
+$H_{0}$: There is no difference in Writing mean score and Reading Mean score across all schools
+
+$H_{a}$: There is significant difference in Writing mean score and Reading Mean score across all schools
+
+$H_{0}:$ diff $= 0$
+
+$H_{a}:$ diff $\not= 0$
+
+### Method 1: Using t.test (Assumes CLT condition are satisfied)
+
+```{r}
+t.test(x = sat_writing_reading$writing, 
+       y = sat_writing_reading$reading, 
+       alternative = "two.sided", 
+       paired = TRUE)
+```
+
+### Method 2: Using Bootstrap re-samples
+
+```{r}
+null_dist <- sat_writing_reading |>
+  specify(response = diff) |>
+  hypothesize(null = "point", mu = 0) |>
+  generate(reps = 1000, type = "bootstrap") |>
+  calculate(stat = "mean")
+
+obs_stat <- mean(sat_writing_reading$diff)
+
+get_p_value(null_dist, obs_stat, direction = "two.sided")
+visualize(null_dist, bins = 20) +
+  shade_p_value(obs_stat = obs_stat, direction = "two.sided")
+```
+
+## Conclusion (Writing vs Reading)
+
+The both the method above show that p value is less than the significance level therefore, rejecting the null hypothesis and concluding that difference between writing and reading mean score across school is significant.
+
+# Independent T-Test (Welch Two Sample T-Test)
+
+## Math vs Writing
+
+$H_0: \mu_{math} - \mu_{writing} = 0$
+
+$H_a: \mu_{math} - \mu_{writing} \not= 0$
+
+```{r}
+t.test(x = sat_math_writing$math, 
+       y = sat_math_writing$writing, 
+       alternative = "two.sided", 
+       paired = FALSE)
+```
+
+## Conclusion (Math vs Writing)
+
+p-values $= 0.006025 < 0.05$. Reject Null Hypothesis. Mean SAT score in math and writing have significant difference.
+
+## Math vs Reading
+
+$H_0: \mu_{math} - \mu_{reading} = 0$
+
+$H_a: \mu_{math} - \mu_{reading} \not= 0$
+
+```{r}
+t.test(x = sat_math_reading$math, 
+       y = sat_math_reading$reading, 
+       alternative = "two.sided", 
+       paired = FALSE)
+```
+
+## Conclusion (Math vs Reading)
+
+p-values $= 0.0484 < 0.05$. Reject Null Hypothesis. Mean SAT score in math and reading have significant difference.
+
+Note: This result is different than pairwise t-test performed before why?
+
+The result differs due to usage of Bonferroni correction made in pairwise t-test to reduce false positives.
+
+current p_value $= 0.0484$
+
+adjusted p_value $=$ current p_value $\cdot 3$ $= 0.1452$ which is closer to p_value in pairwise t-test for math vs reading, which was $0.1332$
+
+## Writing vs Reading
+
+$H_0: \mu_{writing} - \mu_{reading} = 0$
+
+$H_a: \mu_{writing} - \mu_{reading} \not= 0$
+
+```{r}
+t.test(x = sat_writing_reading$writing, 
+       y = sat_writing_reading$reading, 
+       alternative = "two.sided", 
+       paired = FALSE)
+```
+
+## Conclusion (Writing vs Reading)
+
+p-values $= 0.1121 > 0.05$. Accept Null Hypothesis. Mean SAT score in writing and reading does not have significant difference.
